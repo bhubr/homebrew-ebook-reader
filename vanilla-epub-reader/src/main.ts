@@ -1,110 +1,186 @@
+// import { parse } from "txml"
+/* global txml */
+import { fetchBookshelf, fetchBookToc } from "./api"
+import EventEmitter from "./event-emitter"
+import AlertBoxModel from "./models/alert-box.model"
+import AlertBoxView from "./views/alert-box.view"
+import BookListModel from "./models/book-list.model"
+import BookListView from "./views/book-list.view"
 import "./style.css"
 
-// Run server: serve -C -l 5500
-const serverUrl = "http://localhost:5500"
+interface AttrMap {
+  src: string;
+}
 
-const fetchOrFail = async (path, type = 'json') => {
-  const res = await fetch(`${serverUrl}${path}`)
-  if (!res.ok) {
-    throw new Error(`Could not fetch: ${res.statusText}`)
+interface NavPoint {
+  tagName: string;
+  attributes: AttrMap;
+  children: NavPoint[];
+}
+
+
+class TocModel extends EventEmitter {
+  private _toc: NavPoint | null = null
+
+  private _opened: boolean = false
+
+  set toc (tableOfContents: NavPoint | null) {
+    this._toc = tableOfContents
+    this._opened = true
+    this.emit('tocChanged')
   }
-  const books = await res[type]()
-  return books
+
+  get toc (): NavPoint | null {
+    return this._toc
+  }
+
+  set opened (nextOpened: boolean) {
+    this._opened = nextOpened;
+    this.emit('tocToggled')
+  }
+
+  get opened () {
+    return this._opened
+  }
 }
 
-const fetchBookshelf = async () => fetchOrFail(`/books.json`)
+class TocView extends EventEmitter {
+  _model: TocModel
 
-const fetchBookToc = async (slug) => fetchOrFail(`/${slug}/toc.ncx`, 'text')
+  _el: HTMLElement
 
-const fetchBookChapter = async (bookSlug, file) => fetchOrFail(`/${bookSlug}/${file}`, 'text')
+  constructor(private _model: TocModel, selector: string) {
+    super()
+    this._el = document.querySelector(selector)!
 
-const content = (err, books) => {
-  return err
-    ? `<p>${err.message}</p>`
-    : `<ul id="books">${books
-        .map(
-          (book) => `
-      <li>
-        <a href="#${book.path}">
-          ${book.title}
-        </a>
-      </li>
-      `
-        )
-        .join("")}
-      </ul>`
-}
+    _model.on('tocChanged', () => this.render())
+    _model.on('tocToggled', () => this.toggleOpen())
+  }
 
-const buildNavPointTree = (navPoint) => {
-  // ret
-  const label = navPoint.children.find(c => c.tagName === 'navLabel')
-  const content = navPoint.children.find(c => c.tagName === 'content')
-  const labelLine = label ? label.children[0].children[0] : 'N/A'
-  const children = navPoint.children.filter(c => c.tagName === 'navPoint')
-  let text = `<span>
-      <a href="#${content.attributes.src}">${labelLine}</a>
-    </span>
-    <ul>
-    ${
-      children.map(navPoint => `<li>${buildNavPointTree(navPoint)}</li>`).join('')
+  buildNavPointTree(navPoint: NavPoint) {
+    const label = navPoint.children.find((c: NavPoint) => c.tagName === 'navLabel')
+    const content = navPoint.children.find((c: NavPoint) => c.tagName === 'content')!
+    const labelLine = label ? label.children[0].children[0] : 'N/A'
+    const children = navPoint.children.filter(c => c.tagName === 'navPoint')
+    let text: string = `<span>
+        <a href="#${content.attributes.src}">${labelLine}</a>
+      </span>
+      <ul>
+      ${
+        children.map(navPoint => `<li>${this.buildNavPointTree(navPoint)}</li>`).join('')
+      }
+      </ul>
+    `
+    console.log(text, children)
+    return text
+  }
+
+  buildTocTree(toc: NavPoint) {
+    return this.buildNavPointTree(toc.children[0])
+  }
+
+  toggleOpen() {
+    const { opened } = this._model
+    const tocInner = this._el.querySelector('#toc-inner')!
+    if (opened) {
+      tocInner.classList.remove('toc-closed')
+    } else {
+      tocInner.classList.add('toc-closed')
     }
-    </ul>
-  `
-  console.log(text, children)
-  return text
+  }
+
+  render() {
+    const { toc } = this._model
+    this._el.innerHTML = `<button class="toc-do-open" type="button">&raquo;</button>
+    <div id="toc-inner">
+      <button class="toc-do-close" type="button">&laquo;</button>
+    ${toc ? this.buildTocTree(toc) : 'N/A'}
+    </div>`
+    this.toggleOpen()
+
+    const openBtn = this._el.querySelector('.toc-do-open')!
+    openBtn.addEventListener('click', () => this.emit('open'))
+    const closeBtn = this._el.querySelector('.toc-do-close')!
+    closeBtn.addEventListener('click', () => this.emit('close'))
+  }
 }
 
-const buildTocTree = (toc) => {
-  return buildNavPointTree(toc.children[0])
-}
+const renderAppSkeleton = () => `
+<main>
+  <div id="toc"></div>
+  <div id="alert"></div>
+  <div id="bookshelf-wrapper"></div>
+  
+  <div id="content"</div>
+</main>
+`
 
 const init = async () => {
   let fetchErr
   let books
-  try {
-    books = await fetchBookshelf()
-  } catch (err) {
-    fetchErr = err
-  }
+  let bookListModel: BookListModel
+  let bookListView: BookListView
 
-  document.querySelector("#app").innerHTML = `
-  ${content(fetchErr, books)}
-  <main>
-    <div id="toc" class="toc-closed">
-      <div id="toc-top">
-        <button type="button">X</button>
-      </div>
-    </div>
-    <div id="content"</div>
-  </main>
-  `
-  const bookLinks = document.querySelectorAll("#books li a")
-  for (const l of bookLinks) {
-    l.addEventListener("click", async (e) => {
-      e.preventDefault()
-      const [, href] = e.target.href.split("#")
-      console.log(href)
-      const toc = await fetchBookToc(href)
+  const app = document.querySelector<HTMLDivElement>('#app')!
+  app.innerHTML = renderAppSkeleton()
+
+  const alertModel = new AlertBoxModel()
+  const alertView = new AlertBoxView(alertModel, '#alert')
+  const tocModel = new TocModel()
+  const tocView = new TocView(tocModel, '#toc')
+  alertView.on('close', () => alertModel.setError(null))
+  try {
+    books = (await fetchBookshelf()) as Book[]
+    bookListModel = new BookListModel()
+    bookListView = new BookListView(bookListModel, '#bookshelf-wrapper');
+    bookListModel.items = books
+    bookListView.on('bookChanged', (path: string) => {
+      console.log('book changed', path)
+      bookListModel.selected = path
+    })
+
+    bookListModel.on('selectedChanged', async (path: string) => {
+      console.log('book changed', bookListModel.selectedPath)
+      const toc = await fetchBookToc(bookListModel.selectedPath)
       const parsedToc = txml.parse(toc)
       const navMap = parsedToc[1].children[2]
-      const div = document.createElement('DIV')
-      div.innerHTML = buildTocTree(navMap)
-      document.querySelector('#toc').appendChild(div)
-      for (const l of document.querySelectorAll('#toc a')) {
-        l.addEventListener('click', async e => {
-          e.preventDefault()
-          const [, link] = e.target.href.split("#")
-          // const content = await fetchBookChapter(href, link)
-          // console.log(txml.parse(content))
-          const iframe = document.createElement('IFRAME')
-          iframe.src = `${serverUrl}/${href}/${link}`
-          const contentDiv = document.querySelector('#content')
-          contentDiv.innerHTML = ''
-          contentDiv.appendChild(iframe)
-        })
-      }
+      tocModel.toc = navMap
     })
+
+    tocView.on('open', () => {
+      tocModel.opened = true
+    })
+
+    tocView.on('close', () => {
+      tocModel.opened = false
+    })
+  } catch (err) {
+    fetchErr = err as Error
+    alertModel.setError(fetchErr)
   }
+
+  
+  
+  
+  
+  
+    // l.addEventListener("click", async (e) => {
+    //   e.preventDefault()
+      // document.querySelector('#toc').appendChild(div)
+      // for (const l of document.querySelectorAll('#toc a')) {
+      //   l.addEventListener('click', async e => {
+      //     e.preventDefault()
+      //     const [, link] = e.target.href.split("#")
+      //     // const content = await fetchBookChapter(href, link)
+      //     // console.log(txml.parse(content))
+      //     const iframe = document.createElement('IFRAME')
+      //     iframe.src = `${serverUrl}/${href}/${link}`
+      //     const contentDiv = document.querySelector('#content')
+      //     contentDiv.innerHTML = ''
+      //     contentDiv.appendChild(iframe)
+      //   })
+      // }
+    // })
 }
 
 init()
