@@ -1,129 +1,21 @@
 // import { parse } from "txml"
 /* global txml */
 import { fetchBookshelf, fetchBookToc } from "./api"
-import EventEmitter from "./event-emitter"
 import AlertBoxModel from "./models/alert-box.model"
 import AlertBoxView from "./views/alert-box.view"
 import BookListModel from "./models/book-list.model"
 import BookListView from "./views/book-list.view"
+import TocModel from "./models/toc.model"
+import TocView from "./views/toc.view"
 import { serverUrl } from "./config"
 import { Book } from "./types"
 import "./style.css"
 
-interface AttrMap {
-  src: string
-}
-
-interface NavPoint {
-  tagName: string
-  attributes: AttrMap
-  children: NavPoint[]
-}
-
-class TocModel extends EventEmitter {
-  private _toc: NavPoint | null = null
-
-  private _opened: boolean = false
-
-  set toc(tableOfContents: NavPoint | null) {
-    this._toc = tableOfContents
-    this._opened = true
-    this.emit("tocChanged")
-  }
-
-  get toc(): NavPoint | null {
-    return this._toc
-  }
-
-  set opened(nextOpened: boolean) {
-    this._opened = nextOpened
-    this.emit("tocToggled")
-  }
-
-  get opened() {
-    return this._opened
-  }
-}
-
-class TocView extends EventEmitter {
-  _el: HTMLElement
-
-  constructor(private _model: TocModel, selector: string) {
-    super()
-    this._el = document.querySelector(selector)!
-
-    _model.on("tocChanged", () => this.render())
-    _model.on("tocToggled", () => this.toggleOpen())
-  }
-
-  buildNavPointTree(navPoint: NavPoint) {
-    const label = navPoint.children.find(
-      (c: NavPoint) => c.tagName === "navLabel"
-    )
-    const content = navPoint.children.find(
-      (c: NavPoint) => c.tagName === "content"
-    )!
-    const labelLine = label ? label.children[0].children[0] : "N/A"
-    const children = navPoint.children.filter((c) => c.tagName === "navPoint")
-    let text: string = `<span>
-        <a href="#${content.attributes.src}">${labelLine}</a>
-      </span>
-      <ul>
-      ${children
-        .map((navPoint) => `<li>${this.buildNavPointTree(navPoint)}</li>`)
-        .join("")}
-      </ul>
-    `
-    console.log(text, children)
-    return text
-  }
-
-  buildTocTree(toc: NavPoint) {
-    return this.buildNavPointTree(toc.children[0])
-  }
-
-  toggleOpen() {
-    const { opened } = this._model
-    const tocInner = this._el.querySelector("#toc-inner")!
-    if (opened) {
-      tocInner.classList.remove("toc-closed")
-    } else {
-      tocInner.classList.add("toc-closed")
-    }
-  }
-
-  render() {
-    const { toc } = this._model
-    this._el.innerHTML = `<button class="toc-do-open" type="button">&raquo;</button>
-    <div id="toc-inner">
-      <button class="toc-do-close" type="button">&laquo;</button>
-    ${toc ? this.buildTocTree(toc) : "N/A"}
-    </div>`
-    this.toggleOpen()
-
-    const openBtn = this._el.querySelector(".toc-do-open")!
-    openBtn.addEventListener("click", () => this.emit("open"))
-    const closeBtn = this._el.querySelector(".toc-do-close")!
-    closeBtn.addEventListener("click", () => this.emit("close"))
-
-    for (const l of this._el.querySelectorAll("#toc-inner a")!) {
-      l.addEventListener("click", async (e) => {
-        e.preventDefault()
-        const [, link] = e.target.href.split("#")
-        console.log("clicked link", link)
-        this.emit("tocLinkClicked", link)
-        this.emit("close")
-      })
-    }
-  }
-}
-
 const renderAppSkeleton = () => `
 <main>
+  <div id="bookshelf"></div>
   <div id="toc"></div>
   <div id="alert"></div>
-  <div id="bookshelf-wrapper"></div>
-  
   <div id="content"></div>
 </main>
 `
@@ -145,7 +37,7 @@ const init = async () => {
   try {
     books = (await fetchBookshelf()) as Book[]
     bookListModel = new BookListModel()
-    bookListView = new BookListView(bookListModel, "#bookshelf-wrapper")
+    bookListView = new BookListView(bookListModel, "#bookshelf")
     bookListModel.items = books
     bookListView.on("bookChanged", (path: string) => {
       console.log("book changed", path)
@@ -160,6 +52,14 @@ const init = async () => {
       tocModel.toc = navMap
     })
 
+    bookListView.on("open", () => {
+      bookListModel.opened = true
+    })
+
+    bookListView.on("close", () => {
+      bookListModel.opened = false
+    })
+
     tocView.on("open", () => {
       tocModel.opened = true
     })
@@ -169,7 +69,7 @@ const init = async () => {
     })
 
     tocView.on("tocLinkClicked", (link: string) => {
-      const iframe = document.createElement("IFRAME")
+      const iframe = document.createElement("IFRAME") as HTMLIFrameElement
       iframe.src = `${serverUrl}/${bookListModel.selectedPath}/${link}`
       const contentDiv = document.querySelector("#content")!
       contentDiv.innerHTML = ""

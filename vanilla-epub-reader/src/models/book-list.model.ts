@@ -6,6 +6,8 @@ export default class BookListModel extends EventEmitter {
 
   _selectedPath: string = '';
 
+  private _opened: boolean = true;
+
   constructor() {
     super();
   }
@@ -17,6 +19,15 @@ export default class BookListModel extends EventEmitter {
 
   get items () {
     return this._items
+  }
+
+  set opened(nextOpened: boolean) {
+    this._opened = nextOpened
+    this.emit("bookshelfToggled")
+  }
+
+  get opened() {
+    return this._opened
   }
 
   get selectedPath () {

@@ -11,17 +11,18 @@ html, body {
 
 #toc {
   position: fixed;
-  top: 0;
+  top: 20px;
 }
 
 #toc-inner {
   position: fixed;
-  top: 0;
-  bottom: 0;
-  width: 400px;
-  font-size: 13px;
+  top: 20px;
+  height: 100%;
+  
+  font-size: 12px;
   overflow-y: scroll;
   background: #fff;
+  padding-bottom: 2em;
 }
 
 #toc-inner {
@@ -34,12 +35,74 @@ html, body {
   top: 5px;
 }
 
+#toc-inner ul {
+  padding-left: 1.5em;
+}
+
+#toc-inner ul li {
+  list-style-type: none;
+}
+
 .toc-open {
-  left: 0;
+  width: 400px;
 }
 
 .toc-closed {
-  left: -400px;
+  width: 0;
+}
+
+#bookshelf .btn-open {
+  position: fixed;
+  top: 0;
+}
+
+#bookshelf-inner {
+  position: fixed;
+  top: 0;
+  height: 100%;
+  
+  overflow-y: scroll;
+  background: #fff;
+  padding-bottom: 2em;
+}
+
+.bookshelf-open {
+  width: 100%;
+}
+
+.bookshelf-closed {
+  width: 0;
+  overflow: hidden;
+}
+
+#bookshelf-inner ul {
+  padding: 0;
+  display: flex;
+  justify-content: space-between;
+}
+
+#bookshelf-inner ul li {
+  list-style-type: none;
+  position: relative;
+  width: 24%;
+}
+
+#bookshelf-inner ul li .book-title {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 12px;
+}
+
+#bookshelf-inner ul li .book-cover {
+  max-width: 100%;
+}
+
+#content {
+  max-width: 92%;
+  margin: 0 auto;
 }
 
 iframe {
