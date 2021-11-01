@@ -1,0 +1,7 @@
+[
+  {
+    "path": "this-other-book",
+    "title": "This Other Book",
+    "cover": "rel/path/to/the-other-book/images/cover.jpg"
+  }
+]
