@@ -2,7 +2,7 @@
   "name": "vanilla-epub-reader-ts",
   "version": "0.0.0",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host --port 3030",
     "build": "tsc && vite build",
     "serve": "vite preview"
   },
