@@ -7,18 +7,22 @@ import BookListModel from "./models/book-list.model"
 import BookListView from "./views/book-list.view"
 import TocModel from "./models/toc.model"
 import TocView from "./views/toc.view"
+import NavView from "./views/nav.view"
 import { serverUrl } from "./config"
 import { Book } from "./types"
 import "./style.css"
 
 const renderAppSkeleton = () => `
 <main>
+  <button class="nav-btn nav-btn-prev">&lt;</button>
+  <button class="nav-btn nav-btn-next">&gt;</button>
   <div id="bookshelf"></div>
   <div id="toc"></div>
   <div id="alert"></div>
   <div id="content"></div>
 </main>
 `
+
 
 const init = async () => {
   let fetchErr
@@ -34,10 +38,12 @@ const init = async () => {
   const tocModel = new TocModel()
   const tocView = new TocView(tocModel, "#toc")
   alertView.on("close", () => alertModel.setError(null))
+
   try {
     books = (await fetchBookshelf()) as Book[]
     bookListModel = new BookListModel()
     bookListView = new BookListView(bookListModel, "#bookshelf")
+    const navView = new NavView(bookListModel, '.nav-btn-prev', '.nav-btn-next')
     bookListModel.items = books
     bookListView.on("bookChanged", (path: string) => {
       console.log("book changed", path)
@@ -69,11 +75,30 @@ const init = async () => {
     })
 
     tocView.on("tocLinkClicked", (link: string) => {
-      const iframe = document.createElement("IFRAME") as HTMLIFrameElement
+      tocModel.setCurrentPath(link)
+    });
+
+    tocModel.on("tocCurrentPathChanged", () => {
+      const link = tocModel.getCurrentPath()
+      console.log('current path changed', link)
+      let iframe = document.querySelector("#content iframe") as HTMLIFrameElement
+      if (!iframe) {
+        iframe = document.createElement("IFRAME") as HTMLIFrameElement
+        const contentDiv = document.querySelector("#content")!
+        contentDiv.innerHTML = ""
+        contentDiv.appendChild(iframe)
+      }
       iframe.src = `${serverUrl}/${bookListModel.selectedPath}/${link}`
-      const contentDiv = document.querySelector("#content")!
-      contentDiv.innerHTML = ""
-      contentDiv.appendChild(iframe)
+    })
+
+    navView.on("prev", () => {
+      tocModel.previous()
+      // console.log('previous')
+    })
+
+    navView.on("next", () => {
+      tocModel.next()
+      // console.log('next')
     })
   } catch (err) {
     fetchErr = err as Error

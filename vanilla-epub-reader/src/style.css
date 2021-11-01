@@ -124,3 +124,25 @@ iframe {
   position: absolute;
   right: 5px;
 }
+
+.nav-btn {
+  position: fixed;
+  top: calc(50% - 24px);
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #ddd;
+  color: #000;
+  border: 1px solid transparent;
+}
+
+.nav-btn-prev {
+  left: .25em;
+}
+
+.nav-btn-next {
+  right: .25em;
+}

@@ -31,7 +31,6 @@ export default class TocView extends EventEmitter {
         .join("")}
       </ul>
     `
-    console.log(text, children)
     return text
   }
 
